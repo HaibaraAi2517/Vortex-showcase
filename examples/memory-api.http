@@ -1,0 +1,38 @@
+### Store memory
+POST http://localhost:8080/api/v1/memory/store
+Content-Type: application/json
+
+{
+  "content": "Deployment preference: run dry-run validation before production rollout.",
+  "namespace": "agent-session-1",
+  "tags": ["deployment", "preference"],
+  "reasoningChainId": "chain-42",
+  "pinTtlMillis": 60000
+}
+
+### Recall memory
+POST http://localhost:8080/api/v1/memory/recall
+Content-Type: application/json
+
+{
+  "query": "Which validation should happen before production rollout?",
+  "namespace": "agent-session-1",
+  "topK": 5,
+  "tokenBudget": 1024,
+  "tags": ["deployment"],
+  "scenario": "coding"
+}
+
+### Submit feedback
+POST http://localhost:8080/api/v1/memory/feedback
+Content-Type: application/json
+
+{
+  "recallSessionId": "<recall-session-id>",
+  "usedFragmentIds": ["<fragment-id>"],
+  "answerAccepted": true
+}
+
+### Memory health
+GET http://localhost:8080/api/v1/memory/health
+
