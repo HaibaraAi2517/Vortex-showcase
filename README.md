@@ -72,29 +72,54 @@ Vortex 是一个面向长时运行 AI Agent 的记忆与状态管理内核。它
 
 ## 架构概览
 
-```text
-┌───────────────────────────────────────────────────────────┐
-│                     vortex-app                             │
-│  REST API, Actuator, OpenAPI, eval CLI, integration tests   │
-│  MemoryController, TaskController, health indicators        │
-└───────────────────────────┬───────────────────────────────┘
-                            │
-┌───────────────────────────▼───────────────────────────────┐
-│                    vortex-kernel                           │
-│  HMC, recall, eviction, learning, SLO, generation           │
-│  snapshot, WAL, checkpoint, branch, semantic paging         │
-└───────────────────────────┬───────────────────────────────┘
-                            │
-┌───────────────────────────▼───────────────────────────────┐
-│                    vortex-storage                          │
-│  L1 Caffeine, L2 Milvus, L3 MinIO                           │
-└───────────────────────────┬───────────────────────────────┘
-                            │
-┌───────────────────────────▼───────────────────────────────┐
-│                    vortex-common                           │
-│  model, DTO, serialization, exceptions, shared contracts    │
-└───────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Agent[Agent Runtime / Eval Workload] --> API[Vortex REST API]
+
+    subgraph App["vortex-app"]
+        API --> MemoryController[MemoryController]
+        API --> TaskController[TaskController]
+        API --> HealthApi[Health / SLO API]
+    end
+
+    subgraph Kernel["vortex-kernel"]
+        MemoryController --> HMC[Hierarchical Memory Controller]
+        HMC --> Recall[Recall Orchestrator]
+        HMC --> Eviction[Semantic Eviction]
+        HMC --> Learner[Adaptive Weight Learner]
+        HMC --> Paging[Semantic Paging / Prefetch]
+
+        TaskController --> Snapshot[Snapshot Service]
+        Snapshot --> Dag[Task DAG]
+        Snapshot --> Wal[WAL]
+        Snapshot --> Checkpoint[Checkpoint Chain]
+        Snapshot --> Recovery[Recovery Engine]
+
+        HMC --> Diagnostics[Diagnostic Signals]
+        Snapshot --> Diagnostics
+    end
+
+    subgraph Storage["vortex-storage"]
+        HMC --> L1[L1 Hot Cache<br/>Caffeine]
+        HMC --> L2[L2 Vector Store<br/>Milvus]
+        HMC --> L3[L3 Durable Store<br/>MinIO]
+        Snapshot --> DurableState[Checkpoint / WAL Artifacts]
+    end
+
+    subgraph Common["vortex-common"]
+        Contracts[Model / DTO / Serialization / Exceptions]
+    end
+
+    API -. "shared contracts" .-> Contracts
+    HMC -. "shared contracts" .-> Contracts
+    Snapshot -. "shared contracts" .-> Contracts
+    L1 -. "storage model" .-> Contracts
+    L2 -. "storage model" .-> Contracts
+    L3 -. "storage model" .-> Contracts
+    Diagnostics --> HealthApi
 ```
+
+主路径分为两条：memory kernel 负责写入、召回、淘汰、学习、分页和 L2 recovery；task state kernel 负责 DAG、WAL、checkpoint、branch 和 recover。两条路径共享 health/SLO/diagnostic signal，并通过 `vortex-common` 复用外部契约和序列化模型。
 
 ## 模块职责
 
